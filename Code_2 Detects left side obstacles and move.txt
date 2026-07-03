@@ -1,0 +1,80 @@
+/**
+  ******************************************************************************
+  * @file    system_stm32f4xx.c
+  * @author  MCD Application Team
+  * @brief   CMSIS Cortex-M4 Device System Source File.
+  ******************************************************************************
+  */
+#include "stm32f4xx.h"
+
+#if !defined  (HSE_VALUE)
+  #define HSE_VALUE    ((uint32_t)25000000)
+#endif
+
+#if !defined  (HSI_VALUE)
+  #define HSI_VALUE    ((uint32_t)16000000)
+#endif
+
+/* FORCED DEFINITIONS FOR CORETEX RESET HANDLER */
+uint32_t SystemCoreClock = 16000000;
+const uint8_t AHBPrescTable[16] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9};
+const uint8_t APBPrescTable[8]  = {0, 0, 0, 0, 1, 2, 3, 4};
+
+/**
+  * @brief  Setup the microcontroller system
+  * Initialize the FPU setting, vector table and Internal Flash interface.
+  */
+void SystemInit(void)
+{
+  /* FPU settings ------------------------------------------------------------*/
+  #if (__FPU_PRESENT == 1) && (__FPU_USED == 1)
+    SCB->CPACR |= ((3UL << 10*2)|(3UL << 11*2));  /* set CP10 and CP11 Full Access */
+  #endif
+
+  /* Reset the RCC clock configuration to the default reset state ------------*/
+  RCC->CR |= (uint32_t)0x00000001;
+  RCC->CFGR = 0x00000000;
+  RCC->CR &= (uint32_t)0xFEF6FFFF;
+  RCC->PLLCFGR = 0x24003010;
+  RCC->CR &= (uint32_t)0xFFFBFFFF;
+  RCC->CIR = 0x00000000;
+
+  /* Configure the Vector Table location add offset address ------------------*/
+  #ifdef VECT_TAB_SRAM
+    SCB->VTOR = SRAM_BASE;
+  #else
+    SCB->VTOR = FLASH_BASE;
+  #endif
+}
+
+/**
+  * @brief  Update SystemCoreClock variable according to Clock Register Values.
+  */
+void SystemCoreClockUpdate(void)
+{
+  uint32_t tmp = 0, pllm = 2, pllvco = 0, pllp = 2, vcoinput = 0;
+  uint32_t sysclockfreq = 0;
+
+  tmp = RCC->CFGR & RCC_CFGR_SWS;
+  switch (tmp)
+  {
+    case 0x00: sysclockfreq = HSI_VALUE; break;
+    case 0x04: sysclockfreq = HSE_VALUE; break;
+    case 0x08:
+      pllm = RCC->PLLCFGR & RCC_PLLCFGR_PLLM;
+      if ((RCC->PLLCFGR & RCC_PLLCFGR_PLLSRC) == RCC_PLLCFGR_PLLSRC_HSE)
+      {
+        vcoinput = HSE_VALUE / pllm;
+      }
+      else
+      {
+        vcoinput = HSI_VALUE / pllm;
+      }
+      pllvco = vcoinput * ((RCC->PLLCFGR & RCC_PLLCFGR_PLLN) >> 6);
+      pllp = (((RCC->PLLCFGR & RCC_PLLCFGR_PLLP) >> 16) + 1 ) * 2;
+      sysclockfreq = pllvco / pllp;
+      break;
+    default: sysclockfreq = HSI_VALUE; break;
+  }
+  SystemCoreClock = sysclockfreq >> AHBPrescTable[(RCC->CFGR & RCC_CFGR_HPRE)>> 4];
+}
